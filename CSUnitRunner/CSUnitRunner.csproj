@@ -8,9 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Core\" />
-    <Folder Include="Infrastructure\" />
-    <Folder Include="Presentation\" />
+    <Folder Include="Core\Interfaces\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CSUnit\CSUnit.csproj" />
   </ItemGroup>
 
 </Project>

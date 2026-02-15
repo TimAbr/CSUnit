@@ -14,7 +14,7 @@ namespace CSUnit.Attributes
         public DisplayNameAttribute(string name) => Name = name;
     }
 
-    [AttributeUsage(AttributeTargets.Method)]
+    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
     public class DisabledAttribute : Attribute
     {
         public string Reason { get; }

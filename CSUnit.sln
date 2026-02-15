@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CSUnit", "CSUnit\CSUnit.csp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CSUnitRunner", "CSUnitRunner\CSUnitRunner.csproj", "{9E25C893-FC8D-4B78-8E13-A569EE30E921}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestFlightApp", "TestBankApp\TestFlightApp.csproj", "{2CA5800D-B47B-42DC-9006-0C7B7D3AF3B4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{9E25C893-FC8D-4B78-8E13-A569EE30E921}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9E25C893-FC8D-4B78-8E13-A569EE30E921}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9E25C893-FC8D-4B78-8E13-A569EE30E921}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2CA5800D-B47B-42DC-9006-0C7B7D3AF3B4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2CA5800D-B47B-42DC-9006-0C7B7D3AF3B4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2CA5800D-B47B-42DC-9006-0C7B7D3AF3B4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2CA5800D-B47B-42DC-9006-0C7B7D3AF3B4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

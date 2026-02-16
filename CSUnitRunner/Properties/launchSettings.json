@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "CSUnitRunner": {
+      "commandName": "Project",
+      "commandLineArgs": "\"C:\\My Files\\Education\\3_course\\SPP\\Test library\\CSUnit\\TestFlightApp.Tests\\TestFlightApp.Tests\\bin\\Debug\\net8.0\\TestFlightApp.Tests.dll\""
+    }
+  }
+}

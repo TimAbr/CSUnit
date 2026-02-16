@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CSUnitRunner", "CSUnitRunne
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestFlightApp", "TestBankApp\TestFlightApp.csproj", "{2CA5800D-B47B-42DC-9006-0C7B7D3AF3B4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestFlightApp.Tests", "TestFlightApp.Tests\TestFlightApp.Tests\TestFlightApp.Tests.csproj", "{AFC10F53-27E1-4347-B500-D3D0FCBC314E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{2CA5800D-B47B-42DC-9006-0C7B7D3AF3B4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2CA5800D-B47B-42DC-9006-0C7B7D3AF3B4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2CA5800D-B47B-42DC-9006-0C7B7D3AF3B4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AFC10F53-27E1-4347-B500-D3D0FCBC314E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AFC10F53-27E1-4347-B500-D3D0FCBC314E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AFC10F53-27E1-4347-B500-D3D0FCBC314E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AFC10F53-27E1-4347-B500-D3D0FCBC314E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

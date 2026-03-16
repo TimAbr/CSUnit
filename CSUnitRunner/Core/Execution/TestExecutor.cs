@@ -1,47 +1,104 @@
-﻿using System;
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using CSUnit.Exceptions;
 using CSUnitRunner.Core.Models;
 
-namespace CSUnitRunner.Core.Execution
+namespace CSUnitRunner.Core.Execution;
+
+internal class TestExecutor
 {
-    internal class TestExecutor
+    private readonly int _maxThreads;
+    private readonly object _reportsLock = new();
+    public List<ClassTestReport> Reports { get; } = new();
+
+    public TestExecutor(int maxThreads)
     {
-        public List<ClassTestReport> Execute(ExecutableNamespaceNode node)
-        {
-            var reports = new List<ClassTestReport>();
-            ExecuteRecursive(node, reports);
-            return reports;
-        }
+        _maxThreads = maxThreads;
+    }
 
-        private void ExecuteRecursive(ExecutableNamespaceNode node, List<ClassTestReport> reports)
-        {
-            foreach (var exeClass in node.Classes)
-            {
-                reports.Add(ExecuteClass(exeClass));
-            }
+    public void Execute(ExecutableNamespaceNode node)
+    {
+        var allClasses = new List<ExecutableClassNode>();
+        CollectClasses(node, allClasses);
 
-            foreach (var subNs in node.SubNamespaces)
-            {
-                ExecuteRecursive(subNs, reports);
-            }
-        }
+        using var semaphore = new SemaphoreSlim(_maxThreads);
 
-        private ClassTestReport ExecuteClass(ExecutableClassNode exeClass)
+        var classTasks = allClasses.Select(async exeClass =>
         {
             var report = new ClassTestReport { ClassName = exeClass.DisplayName };
+            lock (_reportsLock)
+            {
+                Reports.Add(report);
+            }
 
             try
             {
                 foreach (var m in exeClass.BeforeAll) m.Invoke(null, null);
 
-                foreach (var unit in exeClass.TestUnits)
+                var tasks = exeClass.TestUnits.Select(async unit =>
                 {
-                    report.Results.Add(ExecuteTestUnit(exeClass.Type, unit));
-                }
+                    var result = new TestResult { Name = unit.DisplayName, Status = TestStatus.Pending, StartTime = null };
+                    lock (report.SyncLock)
+                    {
+                        report.Results.Add(result);
+                    }
+
+                    await semaphore.WaitAsync();
+
+                    lock (report.SyncLock)
+                    {
+                        result.Status = TestStatus.Running;
+                        result.StartTime = DateTime.Now;
+                    }
+
+                    TestResult actualResult;
+                    try
+                    {
+                        var testTask = Task.Run(() => ExecuteTestUnit(exeClass.Type, unit));
+                        if (unit.TimeoutMs.HasValue)
+                        {
+                            var timeoutTask = Task.Delay(unit.TimeoutMs.Value);
+                            var completedTask = await Task.WhenAny(testTask, timeoutTask);
+                            if (completedTask == timeoutTask)
+                            {
+                                actualResult = new TestResult
+                                {
+                                    Name = unit.DisplayName,
+                                    Status = TestStatus.Failed,
+                                    ErrorMessage = $"Test exceeded timeout of {unit.TimeoutMs.Value}ms",
+                                    StartTime = result.StartTime,
+                                    Duration = TimeSpan.FromMilliseconds(unit.TimeoutMs.Value)
+                                };
+                            }
+                            else
+                            {
+                                actualResult = await testTask;
+                            }
+                        }
+                        else
+                        {
+                            actualResult = await testTask;
+                        }
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+
+                    lock (report.SyncLock)
+                    {
+                        var index = report.Results.IndexOf(result);
+                        if (index != -1) report.Results[index] = actualResult;
+                    }
+                }).ToArray();
+
+                await Task.WhenAll(tasks);
 
                 foreach (var m in exeClass.AfterAll) m.Invoke(null, null);
             }
@@ -49,64 +106,71 @@ namespace CSUnitRunner.Core.Execution
             {
                 Console.WriteLine($"[Critical Error] Context failure in {exeClass.DisplayName}: {ex.Message}");
             }
+        }).ToArray();
 
-            return report;
-        }
+        Task.WaitAll(classTasks);
+    }
 
-        private TestResult ExecuteTestUnit(Type classType, TestUnit unit)
+    private void CollectClasses(ExecutableNamespaceNode node, List<ExecutableClassNode> list)
+    {
+        list.AddRange(node.Classes);
+        foreach (var subNs in node.SubNamespaces)
         {
-            var result = new TestResult { Name = unit.DisplayName };
-            var sw = Stopwatch.StartNew();
+            CollectClasses(subNs, list);
+        }
+    }
 
-            try
+    private TestResult ExecuteTestUnit(Type classType, TestUnit unit)
+    {
+        var result = new TestResult { Name = unit.DisplayName, StartTime = DateTime.Now };
+        var sw = Stopwatch.StartNew();
+
+        try
+        {
+            var instance = Activator.CreateInstance(classType)!;
+
+            foreach (var m in unit.BeforeEach) InvokeMethod(m, instance);
+            InvokeMethod(unit.TestMethod, instance);
+            foreach (var m in unit.AfterEach) InvokeMethod(m, instance);
+
+            result.Status = TestStatus.Passed;
+        }
+        catch (TargetInvocationException ex)
+        {
+            var inner = ex.InnerException;
+            if (inner is AssertionFailedException)
             {
-                object instance = Activator.CreateInstance(classType)!;
-
-                foreach (var m in unit.BeforeEach) InvokeMethod(m, instance);
-
-                InvokeMethod(unit.TestMethod, instance);
-
-                foreach (var m in unit.AfterEach) InvokeMethod(m, instance);
-
-                result.Status = TestStatus.Passed;
+                result.Status = TestStatus.Failed;
+                result.ErrorMessage = inner.Message;
             }
-            catch (TargetInvocationException ex)
-            {
-                var inner = ex.InnerException;
-                if (inner is AssertionFailedException)
-                {
-                    result.Status = TestStatus.Failed;
-                    result.ErrorMessage = inner.Message;
-                }
-                else
-                {
-                    result.Status = TestStatus.Error;
-                    result.ErrorMessage = inner?.Message ?? ex.Message;
-                    result.StackTrace = inner?.StackTrace;
-                }
-            }
-            catch (Exception ex)
+            else
             {
                 result.Status = TestStatus.Error;
-                result.ErrorMessage = ex.Message;
+                result.ErrorMessage = inner?.Message ?? ex.Message;
+                result.StackTrace = inner?.StackTrace;
             }
-            finally
-            {
-                sw.Stop();
-                result.Duration = sw.Elapsed;
-            }
-
-            return result;
+        }
+        catch (Exception ex)
+        {
+            result.Status = TestStatus.Error;
+            result.ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            sw.Stop();
+            result.Duration = sw.Elapsed;
         }
 
-        private void InvokeMethod(MethodInfo method, object instance)
-        {
-            var result = method.Invoke(instance, null);
+        return result;
+    }
 
-            if (result is Task task)
-            {
-                task.GetAwaiter().GetResult();
-            }
+    private void InvokeMethod(MethodInfo method, object instance)
+    {
+        var result = method.Invoke(instance, null);
+
+        if (result is Task task)
+        {
+            task.GetAwaiter().GetResult();
         }
     }
 }

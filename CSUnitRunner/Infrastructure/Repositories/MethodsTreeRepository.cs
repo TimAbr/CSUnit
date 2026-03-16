@@ -1,31 +1,25 @@
-﻿using System.Reflection;
+using System.Reflection;
 using CSUnitRunner.Core.Models;
 using CSUnitRunner.Core.Repositories;
 using CSUnitRunner.Infrastructure.DataSources;
 
-namespace CSUnitRunner.Infrastructure.Repositories
+namespace CSUnitRunner.Infrastructure.Repositories;
+
+public class MethodsTreeRepository : IMethodsTreeRepository
 {
-    public class MethodsTreeRepository : IMethodsTreeRepository
+    private readonly MethodsTreeSource _dataSource = new();
+
+    public NamespaceNode BuildTree(Assembly assembly)
     {
-        private readonly MethodsTreeSource _dataSource;
+        return _dataSource.LoadRawTree(assembly);
+    }
 
-        public MethodsTreeRepository()
-        {
-            _dataSource = new MethodsTreeSource();
-        }
+    public NamespaceNode BuildTreeFromFile(string dllPath)
+    {
+        if (!File.Exists(dllPath))
+            throw new FileNotFoundException($"DLL not found at {dllPath}");
 
-        public NamespaceNode BuildTree(Assembly assembly)
-        {
-            return _dataSource.LoadRawTree(assembly);
-        }
-
-        public NamespaceNode BuildTreeFromFile(string dllPath)
-        {
-            if (!File.Exists(dllPath))
-                throw new FileNotFoundException($"DLL not found at {dllPath}");
-
-            var assembly = Assembly.LoadFrom(dllPath);
-            return BuildTree(assembly);
-        }
+        var assembly = Assembly.LoadFrom(dllPath);
+        return BuildTree(assembly);
     }
 }

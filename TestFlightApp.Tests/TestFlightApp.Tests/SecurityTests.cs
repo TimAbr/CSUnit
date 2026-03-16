@@ -1,4 +1,4 @@
-﻿using CSUnit.Assertions;
+using static CSUnit.Assertions.Assertions;
 using CSUnit.Attributes;
 using FlightSystem.Core;
 using FlightSystem.Services;
@@ -13,7 +13,7 @@ public class SecurityTests
         var passenger = new Passenger("P1", "Ivan", false);
         var flight = new Flight("SU-100", 100);
 
-        Assertions.assertThrows<SecurityException>(() => flight.BoardPassenger(passenger));
+        AssertThrows<SecurityException>(() => flight.BoardPassenger(passenger));
     }
 
     [Test]
@@ -22,8 +22,8 @@ public class SecurityTests
     {
         var passenger = new Passenger("P2", "Maria", true);
 
-        Assertions.assertNotNull(passenger.Id);
-        Assertions.assertTrue(passenger.HasPassport);
+        AssertNotNull(passenger.Id);
+        AssertTrue(passenger.HasPassport);
     }
 
     [Test]
@@ -33,6 +33,6 @@ public class SecurityTests
         var registry = new AirportRegistry();
         var result = registry.GetFlight("FAKE-999");
 
-        Assertions.assertNull(result);
+        AssertNull(result);
     }
 }

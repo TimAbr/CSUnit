@@ -1,4 +1,4 @@
-﻿using CSUnit.Assertions;
+using static CSUnit.Assertions.Assertions;
 using CSUnit.Attributes;
 using FlightSystem.Core;
 using FlightSystem.Services;
@@ -6,7 +6,7 @@ using FlightSystem.Services;
 [DisplayName("Интеграционные операции")]
 public class IntegrationTests
 {
-    private static AirportRegistry _sharedRegistry;
+    private static AirportRegistry _sharedRegistry = null!;
 
     [BeforeAll]
     public static void SetupSharedContext()
@@ -22,14 +22,14 @@ public class IntegrationTests
         var flight1 = _sharedRegistry.GetFlight("G-1");
         var flight2 = _sharedRegistry.GetFlight("G-1");
 
-        Assertions.assertSame(flight1, flight2);
+        AssertSame(flight1, flight2);
     }
 
     [Test]
     [DisplayName("Переполнение рейса")]
     public void Test_Flight_Overfill()
     {
-        var flight = _sharedRegistry.GetFlight("G-1");
+        var flight = _sharedRegistry.GetFlight("G-1")!;
         var p1 = new Passenger("ID1", "A", true);
         var p2 = new Passenger("ID2", "B", true);
         var p3 = new Passenger("ID3", "C", true);
@@ -37,6 +37,6 @@ public class IntegrationTests
         flight.BoardPassenger(p1);
         flight.BoardPassenger(p2);
 
-        Assertions.assertThrows<NoSeatsException>(() => flight.BoardPassenger(p3));
+        AssertThrows<NoSeatsException>(() => flight.BoardPassenger(p3));
     }
 }

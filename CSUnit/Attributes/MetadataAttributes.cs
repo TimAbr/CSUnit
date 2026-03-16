@@ -1,23 +1,25 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace CSUnit.Attributes
+namespace CSUnit.Attributes;
+
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
+public class DisplayNameAttribute(string name) : Attribute
 {
+    public string Name { get; } = name;
+}
 
-    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
-    public class DisplayNameAttribute : Attribute
-    {
-        public string Name { get; }
-        public DisplayNameAttribute(string name) => Name = name;
-    }
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
+public class DisabledAttribute(string reason = "None") : Attribute
+{
+    public string Reason { get; } = reason;
+}
 
-    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
-    public class DisabledAttribute : Attribute
-    {
-        public string Reason { get; }
-        public DisabledAttribute(string reason = "None") => Reason = reason;
-    }
+[AttributeUsage(AttributeTargets.Method)]
+public class TimeoutAttribute(int milliseconds) : Attribute
+{
+    public int Milliseconds { get; } = milliseconds;
 }

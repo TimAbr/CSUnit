@@ -1,100 +1,163 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using CSUnitRunner.Core.Models;
 
-namespace CSUnitRunner.Presentation
+namespace CSUnitRunner.Presentation;
+
+internal static class ConsoleReporter
 {
-    internal static class ConsoleReporter
+    private const string ANSI_RESET = "\u001b[0m";
+    private const string ANSI_CLEAR_ALL = "\u001b[2J\u001b[3J\u001b[H";
+
+    private const string C_YELLOW = "\u001b[33m";
+    private const string C_CYAN = "\u001b[36m";
+    private const string C_GREEN = "\u001b[32m";
+    private const string C_RED = "\u001b[31m";
+    private const string C_MAGENTA = "\u001b[35m";
+    private const string C_GRAY = "\u001b[90m";
+    private const string C_WHITE = "\u001b[37m";
+
+    static ConsoleReporter()
     {
-        public static void PrintReports(List<ClassTestReport> reports)
+        try { Console.OutputEncoding = Encoding.UTF8; } catch { }
+    }
+
+    public static void PrintDynamicReports(IEnumerable<ClassTestReport> reports)
+    {
+        try 
         {
-            Console.OutputEncoding = Encoding.UTF8;
+            Console.CursorVisible = false;
+            var sb = new StringBuilder();
+            sb.Append(ANSI_CLEAR_ALL); 
+            BuildReportString(sb, reports);
+            Console.Write(sb.ToString());
+        } 
+        catch { }
+    }
 
-            Console.WriteLine("\n" + new string('=', 40));
-            Console.WriteLine("       TEST EXECUTION REPORT");
-            Console.WriteLine(new string('=', 40) + "\n");
+    public static void PrintReports(IEnumerable<ClassTestReport> reports)
+    {
+        Console.CursorVisible = true;
+        var sb = new StringBuilder();
+        sb.Append(ANSI_CLEAR_ALL);
+        BuildReportString(sb, reports);
+        Console.Write(sb.ToString());
+    }
 
-            int totalPassed = 0;
-            int totalFailed = 0;
+    private static void BuildReportString(StringBuilder sb, IEnumerable<ClassTestReport> reports)
+    {
+        sb.AppendLine($"{C_YELLOW}========================================{ANSI_RESET}");
+        sb.AppendLine($"{C_YELLOW}       TEST EXECUTION REPORT            {ANSI_RESET}");
+        sb.AppendLine($"{C_YELLOW}========================================{ANSI_RESET}");
+        sb.AppendLine();
 
-            foreach (var report in reports)
+        int totalPassed = 0;
+        int totalFailed = 0;
+        int totalRunning = 0;
+        int totalPending = 0;
+
+        var sortedReports = reports.OrderBy(r => r.ClassName).ToList();
+
+        foreach (var report in sortedReports)
+        {
+            sb.AppendLine($"{C_CYAN}● CLASS: {report.ClassName}{ANSI_RESET}");
+
+            List<TestResult> results;
+            lock (report.SyncLock)
             {
-                Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine($"● CLASS: {report.ClassName}");
-                Console.ResetColor();
-
-                foreach (var res in report.Results)
-                {
-                    PrintTestLine(res);
-
-                    if (res.Status == TestStatus.Passed) totalPassed++;
-                    else totalFailed++;
-                }
-                Console.WriteLine();
+                results = report.Results.OrderBy(res => res.Name).ToList();
             }
 
-            PrintSummary(totalPassed, totalFailed);
+            foreach (var res in results)
+            {
+                AppendTestLine(sb, res);
+
+                if (res.Status == TestStatus.Passed) totalPassed++;
+                else if (res.Status == TestStatus.Failed || res.Status == TestStatus.Error) totalFailed++;
+                else if (res.Status == TestStatus.Running) totalRunning++;
+                else if (res.Status == TestStatus.Pending) totalPending++;
+            }
+            sb.AppendLine();
         }
 
-        private static void PrintTestLine(TestResult res)
+        sb.AppendLine(new string('-', 40));
+        sb.Append("TOTAL: ");
+        sb.Append($"{C_GREEN}{totalPassed} Passed{ANSI_RESET}, ");
+        sb.Append($"{C_RED}{totalFailed} Failed{ANSI_RESET}");
+
+        if (totalRunning > 0) 
         {
-            string icon;
-            ConsoleColor statusBg;
-            ConsoleColor statusFg = ConsoleColor.White;
-
-            if (res.Status == TestStatus.Passed)
-            {
-                icon = " ✔ ";
-                statusBg = ConsoleColor.DarkGreen;
-            }
-            else
-            {
-                icon = " ✘ ";
-                statusBg = ConsoleColor.DarkRed;
-            }
-
-            Console.Write("  "); 
-            Console.BackgroundColor = statusBg;
-            Console.ForegroundColor = statusFg;
-            Console.Write(icon);
-            Console.ResetColor();
-
-            Console.Write($" {res.Name,-30}");
-
-            Console.ForegroundColor = ConsoleColor.DarkGray;
-            Console.WriteLine($"[{res.Duration.TotalMilliseconds,6:F0} ms]");
-            Console.ResetColor();
-
-            if (res.Status != TestStatus.Passed)
-            {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"     └─ Message: {res.ErrorMessage}");
-                if (!string.IsNullOrEmpty(res.StackTrace))
-                {
-                    var lines = res.StackTrace.Split('\n');
-                    Console.WriteLine($"     └─ Trace: {lines[0].Trim()}");
-                }
-                Console.ResetColor();
-            }
+            sb.Append($", {C_YELLOW}{totalRunning} Running{ANSI_RESET}");
         }
 
-        private static void PrintSummary(int passed, int failed)
+        if (totalPending > 0)
         {
-            Console.WriteLine(new string('-', 40));
-            Console.Write("TOTAL: ");
+            sb.Append($", {C_GRAY}{totalPending} Queued{ANSI_RESET}");
+        }
+        
+        sb.AppendLine();
+        sb.AppendLine(new string('-', 40));
+        sb.AppendLine();
+    }
 
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.Write($"{passed} Passed");
-            Console.ResetColor();
+    private static void AppendTestLine(StringBuilder sb, TestResult res)
+    {
+        string icon;
+        string iconStyle;
+        string textStyle;
+        
+        if (res.Status == TestStatus.Passed) 
+        { 
+            icon = "\u2713";
+            iconStyle = "\u001b[1;32m";
+            textStyle = C_GREEN; 
+        }
+        else if (res.Status == TestStatus.Failed || res.Status == TestStatus.Error) 
+        { 
+            icon = "✘"; 
+            iconStyle = C_RED; 
+            textStyle = C_RED; 
+        }
+        else if (res.Status == TestStatus.Running) 
+        { 
+            icon = "⟳"; 
+            iconStyle = C_YELLOW; 
+            textStyle = C_YELLOW; 
+        }
+        else 
+        { 
+            icon = "…"; 
+            iconStyle = C_GRAY; 
+            textStyle = C_GRAY; 
+        }
 
-            Console.Write(", ");
+        string timeStr;
+        if (res.Status == TestStatus.Pending)
+        {
+            timeStr = "  wait   ";
+        }
+        else
+        {
+            double ms = res.Status == TestStatus.Running && res.StartTime.HasValue
+                ? (DateTime.Now - res.StartTime.Value).TotalMilliseconds
+                : res.Duration.TotalMilliseconds;
+            timeStr = $"{ms,6:F0} ms";
+        }
 
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.Write($"{failed} Failed");
-            Console.ResetColor();
+        sb.Append("  ");
+        sb.Append($"{iconStyle}{icon}{ANSI_RESET} ");
+        sb.AppendLine($"{textStyle}{res.Name,-37} [{timeStr}]{ANSI_RESET}");
 
-            Console.WriteLine("\n" + new string('-', 40) + "\n");
+        if (res.Status == TestStatus.Failed || res.Status == TestStatus.Error)
+        {
+            sb.AppendLine($"{C_RED}     └─ Error: {res.ErrorMessage}{ANSI_RESET}");
+            if (!string.IsNullOrEmpty(res.StackTrace))
+            {
+                var firstLine = res.StackTrace.Split('\n')[0].Trim();
+                sb.AppendLine($"{C_RED}     └─ Stack: {firstLine}{ANSI_RESET}");
+            }
         }
     }
 }

@@ -29,26 +29,31 @@ class Program
             var analyzer = new TreeAnalyzer();
             var executableTree = analyzer.Analyze(filteredTree);
 
-            var executor = new TestExecutor(config.Threads);
-            try { Console.Clear(); } catch { }
+            var pool = new CustomThreadPool(
+                coreSize: config.CoreThreads, 
+                maxSize: config.MaxThreads > 0 ? Math.Max(config.CoreThreads, config.MaxThreads) : config.CoreThreads, 
+                keepAliveTime: TimeSpan.FromSeconds(config.KeepAliveSeconds));
 
-            using var cts = new CancellationTokenSource();
-            var timerTask = Task.Run(async () =>
+            var executor = new TestExecutor(pool);
+
+            var startTime = DateTime.Now;
+            bool isFinished = false;
+            pool.Enqueue(() =>
             {
-                while (!cts.Token.IsCancellationRequested)
+                while (!isFinished)
                 {
-                    try { ConsoleReporter.PrintDynamicReports(executor.Reports); } catch { }
-                    await Task.Delay(100, cts.Token);
+                    try { ConsoleReporter.PrintDynamicReports(executor.Reports, pool.GetStatus(), DateTime.Now - startTime); } catch { }
+                    Thread.Sleep(200);
                 }
-            }, cts.Token);
+            });
 
             executor.Execute(executableTree);
             
-            cts.Cancel();
-            try { timerTask.Wait(); } catch { }
+            isFinished = true;
+            var finalDuration = DateTime.Now - startTime;
+            Thread.Sleep(300); // Give reporter time for final frame
 
-            try { ConsoleReporter.PrintDynamicReports(executor.Reports); } 
-            catch { ConsoleReporter.PrintReports(executor.Reports); }
+            ConsoleReporter.PrintDynamicReports(executor.Reports, pool.GetStatus(), finalDuration);
 
             Console.WriteLine("\nPress any key to exit...");
             Console.ReadKey();
@@ -66,7 +71,9 @@ class Program
     private class RunnerConfig
     {
         public string DllPath { get; set; } = string.Empty;
-        public int Threads { get; set; } = Environment.ProcessorCount-1;
+        public int CoreThreads { get; set; } = 3;
+        public int MaxThreads { get; set; } = 0; // 0 means not specified by user
+        public int KeepAliveSeconds { get; set; } = 10;
         public string? TargetClass { get; set; }
         public string? TargetMethod { get; set; }
     }
@@ -83,41 +90,52 @@ class Program
 
         for (var i = 0; i < args.Length; i++)
         {
-            switch (args[i])
+            string arg = args[i];
+            string? value = null;
+
+            if (arg.Contains('='))
             {
-                case "--dll" when i + 1 < args.Length:
-                    config.DllPath = args[++i];
+                var parts = arg.Split('=', 2);
+                arg = parts[0];
+                value = parts[1];
+            }
+            else if (i + 1 < args.Length && !args[i + 1].StartsWith("--"))
+            {
+                value = args[++i];
+            }
+
+            switch (arg)
+            {
+                case "--dll":
+                    if (value != null) config.DllPath = value;
                     break;
-                case "--threads" when i + 1 < args.Length:
-                {
-                    if (int.TryParse(args[++i], out var t) && t >= 1) config.Threads = t;
-                    else
-                    {
-                        Console.WriteLine("Invalid thread count. Must be >= 1.");
-                        return null;
-                    }
+                case "--threads":
+                    if (value != null && int.TryParse(value, out var core) && core >= 1) config.CoreThreads = core;
                     break;
-                }
-                case "--class" when i + 1 < args.Length:
-                    config.TargetClass = args[++i];
+                case "--max-threads":
+                    if (value != null && int.TryParse(value, out var max) && max >= 1) config.MaxThreads = max;
                     break;
-                case "--method" when i + 1 < args.Length:
-                    config.TargetMethod = args[++i];
+                case "--keep-alive":
+                    if (value != null && int.TryParse(value, out var keep) && keep >= 1) config.KeepAliveSeconds = keep;
+                    break;
+                case "--class":
+                    if (value != null) config.TargetClass = value;
+                    break;
+                case "--method":
+                    if (value != null) config.TargetMethod = value;
                     break;
                 default:
-                {
-                    if (!args[i].StartsWith("--") && string.IsNullOrEmpty(config.DllPath))
+                    if (!arg.StartsWith("--") && string.IsNullOrEmpty(config.DllPath))
                     {
-                        config.DllPath = args[i];
+                        config.DllPath = arg;
                     }
                     break;
-                }
             }
         }
 
         if (!string.IsNullOrEmpty(config.DllPath)) return config;
         
-        Console.WriteLine($"Usage: CSUnitRunner --dll <path_to_dll> [--threads <count> (default: {Environment.ProcessorCount})] [--class <className>] [--method <methodName>]");
+        Console.WriteLine("Usage: CSUnitRunner --dll <path> [--threads <n>] [--max-threads <n>] [--keep-alive <sec>] [--class <name>] [--method <name>]");
         return null;
     }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using CSUnitRunner.Core.Execution;
 using CSUnitRunner.Core.Models;
 
 namespace CSUnitRunner.Presentation;
@@ -24,30 +25,42 @@ internal static class ConsoleReporter
         try { Console.OutputEncoding = Encoding.UTF8; } catch { }
     }
 
-    public static void PrintDynamicReports(IEnumerable<ClassTestReport> reports)
+    public static void PrintDynamicReports(IEnumerable<ClassTestReport> reports, ThreadPoolStatus? poolStatus = null, TimeSpan? elapsedTime = null)
     {
         try 
         {
             Console.CursorVisible = false;
             var sb = new StringBuilder();
             sb.Append(ANSI_CLEAR_ALL); 
-            BuildReportString(sb, reports);
+            BuildReportString(sb, reports, poolStatus, elapsedTime);
             Console.Write(sb.ToString());
         } 
         catch { }
     }
 
-    public static void PrintReports(IEnumerable<ClassTestReport> reports)
+    public static void PrintReports(IEnumerable<ClassTestReport> reports, ThreadPoolStatus? poolStatus = null, TimeSpan? elapsedTime = null)
     {
         Console.CursorVisible = true;
         var sb = new StringBuilder();
         sb.Append(ANSI_CLEAR_ALL);
-        BuildReportString(sb, reports);
+        BuildReportString(sb, reports, poolStatus, elapsedTime);
         Console.Write(sb.ToString());
     }
 
-    private static void BuildReportString(StringBuilder sb, IEnumerable<ClassTestReport> reports)
+    private static void BuildReportString(StringBuilder sb, IEnumerable<ClassTestReport> reports, ThreadPoolStatus? poolStatus, TimeSpan? elapsedTime)
     {
+        if (poolStatus.HasValue)
+        {
+            var p = poolStatus.Value;
+            sb.AppendLine($"{C_MAGENTA}--- THREAD POOL STATUS ---{ANSI_RESET}");
+            sb.Append($"{C_WHITE}Threads: {p.TotalThreads}/{p.MaxSize} (Core: {p.CoreSize}), ");
+            sb.Append($"{C_CYAN}Busy: {p.BusyThreads}, ");
+            sb.Append($"{C_YELLOW}Queue: {p.QueueSize}{ANSI_RESET}");
+            sb.AppendLine();
+            sb.AppendLine(new string('-', 40));
+            sb.AppendLine();
+        }
+
         sb.AppendLine($"{C_YELLOW}========================================{ANSI_RESET}");
         sb.AppendLine($"{C_YELLOW}       TEST EXECUTION REPORT            {ANSI_RESET}");
         sb.AppendLine($"{C_YELLOW}========================================{ANSI_RESET}");
@@ -98,6 +111,12 @@ internal static class ConsoleReporter
         }
         
         sb.AppendLine();
+        
+        if (elapsedTime.HasValue)
+        {
+            sb.AppendLine($"{C_WHITE}Time: {elapsedTime.Value.TotalSeconds:F2} seconds{ANSI_RESET}");
+        }
+        
         sb.AppendLine(new string('-', 40));
         sb.AppendLine();
     }

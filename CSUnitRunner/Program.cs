@@ -1,5 +1,8 @@
+using System.Reflection;
+using CSUnit.Attributes;
 using CSUnitRunner.Core.Execution;
 using CSUnitRunner.Core.Preparation;
+using CSUnitRunner.Core.Logging;
 using CSUnitRunner.Infrastructure.Repositories;
 using CSUnitRunner.Presentation;
 
@@ -14,10 +17,21 @@ class Program
 
         try
         {
+            TestLogger.Clear();
             var repository = new MethodsTreeRepository();
             var rawTree = repository.BuildTreeFromFile(config.DllPath);
 
-            var filter = new TreeFilter();
+            Func<MemberInfo, bool>? filterDelegate = null;
+            if (!string.IsNullOrEmpty(config.Category))
+            {
+                filterDelegate = member => 
+                {
+                    var categories = member.GetCustomAttributes<CategoryAttribute>();
+                    return categories.Any(c => c.Category.Equals(config.Category, StringComparison.OrdinalIgnoreCase));
+                };
+            }
+
+            var filter = new TreeFilter(config.TargetClass, config.TargetMethod, filterDelegate);
             var filteredTree = filter.Filter(rawTree);
 
             if (filteredTree == null)
@@ -29,10 +43,35 @@ class Program
             var analyzer = new TreeAnalyzer();
             var executableTree = analyzer.Analyze(filteredTree);
 
+            var poolEvents = new System.Collections.Concurrent.ConcurrentQueue<string>();
+
             var pool = new CustomThreadPool(
                 coreSize: config.CoreThreads, 
                 maxSize: config.MaxThreads > 0 ? Math.Max(config.CoreThreads, config.MaxThreads) : config.CoreThreads, 
                 keepAliveTime: TimeSpan.FromSeconds(config.KeepAliveSeconds));
+
+            pool.OnThreadCreated += t => { 
+                var msg = $"[THREAD]: Created -> {t.Name}";
+                poolEvents.Enqueue(msg);
+                TestLogger.Info(msg);
+            };
+            pool.OnThreadRemoved += t => {
+                var msg = $"[THREAD]: Retired -> {t.Name}";
+                poolEvents.Enqueue(msg);
+                TestLogger.Info(msg);
+            };
+            pool.OnThreadHung += (t, d) => {
+                var msg = $"[THREAD]: !!! HUNG !!! -> {t.Name} ({d.TotalSeconds}s)";
+                poolEvents.Enqueue(msg);
+                TestLogger.Info(msg);
+            };
+
+            pool.OnTaskStarted += (t, a) => {
+                TestLogger.Info($"[TASK]: Started on {t.Name}");
+            };
+            pool.OnTaskCompleted += (t, a) => {
+                TestLogger.Info($"[TASK]: Completed on {t.Name}");
+            };
 
             var executor = new TestExecutor(pool);
 
@@ -42,7 +81,7 @@ class Program
             {
                 while (!isFinished)
                 {
-                    try { ConsoleReporter.PrintDynamicReports(executor.Reports, pool.GetStatus(), DateTime.Now - startTime); } catch { }
+                    try { ConsoleReporter.PrintDynamicReports(executor.Reports, pool.GetStatus(), DateTime.Now - startTime, poolEvents); } catch { }
                     Thread.Sleep(200);
                 }
             });
@@ -50,12 +89,15 @@ class Program
             executor.Execute(executableTree);
             
             isFinished = true;
-            var finalDuration = DateTime.Now - startTime;
-            Thread.Sleep(300); // Give reporter time for final frame
+            Thread.Sleep(300);
 
-            ConsoleReporter.PrintDynamicReports(executor.Reports, pool.GetStatus(), finalDuration);
+            ThreadPoolStatus? finalStatus = null;
+            try { finalStatus = pool.GetStatus(); } catch { }
 
-            Console.WriteLine("\nPress any key to exit...");
+            ConsoleReporter.PrintReports(executor.Reports, finalStatus, DateTime.Now - startTime, poolEvents);
+            pool.Dispose();
+
+            Console.WriteLine("\nExecution finished. Press any key to exit...");
             Console.ReadKey();
         }
         catch (Exception ex)
@@ -63,7 +105,7 @@ class Program
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"[FATAL ERROR]: {ex.Message}");
             Console.ResetColor();
-            Console.WriteLine("\nPress any key to exit...");
+            Console.WriteLine("\nExecution finished with error. Press any key to exit...");
             Console.ReadKey();
         }
     }
@@ -72,10 +114,11 @@ class Program
     {
         public string DllPath { get; set; } = string.Empty;
         public int CoreThreads { get; set; } = 3;
-        public int MaxThreads { get; set; } = 0; // 0 means not specified by user
+        public int MaxThreads { get; set; } = 0;
         public int KeepAliveSeconds { get; set; } = 10;
         public string? TargetClass { get; set; }
         public string? TargetMethod { get; set; }
+        public string? Category { get; set; }
     }
 
     private static RunnerConfig? ParseArgs(string[] args)
@@ -124,6 +167,9 @@ class Program
                 case "--method":
                     if (value != null) config.TargetMethod = value;
                     break;
+                case "--category":
+                    if (value != null) config.Category = value;
+                    break;
                 default:
                     if (!arg.StartsWith("--") && string.IsNullOrEmpty(config.DllPath))
                     {
@@ -135,7 +181,7 @@ class Program
 
         if (!string.IsNullOrEmpty(config.DllPath)) return config;
         
-        Console.WriteLine("Usage: CSUnitRunner --dll <path> [--threads <n>] [--max-threads <n>] [--keep-alive <sec>] [--class <name>] [--method <name>]");
+        Console.WriteLine("Usage: CSUnitRunner --dll <path> [--threads <n>] [--max-threads <n>] [--keep-alive <sec>] [--class <name>] [--method <name>] [--category <name>]");
         return null;
     }
 }

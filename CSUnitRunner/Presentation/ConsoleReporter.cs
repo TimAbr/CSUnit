@@ -25,29 +25,29 @@ internal static class ConsoleReporter
         try { Console.OutputEncoding = Encoding.UTF8; } catch { }
     }
 
-    public static void PrintDynamicReports(IEnumerable<ClassTestReport> reports, ThreadPoolStatus? poolStatus = null, TimeSpan? elapsedTime = null)
+    public static void PrintDynamicReports(IEnumerable<ClassTestReport> reports, ThreadPoolStatus? poolStatus = null, TimeSpan? elapsedTime = null, IEnumerable<string>? events = null)
     {
         try 
         {
             Console.CursorVisible = false;
             var sb = new StringBuilder();
             sb.Append(ANSI_CLEAR_ALL); 
-            BuildReportString(sb, reports, poolStatus, elapsedTime);
+            BuildReportString(sb, reports, poolStatus, elapsedTime, events);
             Console.Write(sb.ToString());
         } 
         catch { }
     }
 
-    public static void PrintReports(IEnumerable<ClassTestReport> reports, ThreadPoolStatus? poolStatus = null, TimeSpan? elapsedTime = null)
+    public static void PrintReports(IEnumerable<ClassTestReport> reports, ThreadPoolStatus? poolStatus = null, TimeSpan? elapsedTime = null, IEnumerable<string>? events = null)
     {
-        Console.CursorVisible = true;
+        try { Console.CursorVisible = true; } catch { }
         var sb = new StringBuilder();
         sb.Append(ANSI_CLEAR_ALL);
-        BuildReportString(sb, reports, poolStatus, elapsedTime);
+        BuildReportString(sb, reports, poolStatus, elapsedTime, events);
         Console.Write(sb.ToString());
     }
 
-    private static void BuildReportString(StringBuilder sb, IEnumerable<ClassTestReport> reports, ThreadPoolStatus? poolStatus, TimeSpan? elapsedTime)
+    private static void BuildReportString(StringBuilder sb, IEnumerable<ClassTestReport> reports, ThreadPoolStatus? poolStatus, TimeSpan? elapsedTime, IEnumerable<string>? events)
     {
         if (poolStatus.HasValue)
         {
@@ -118,6 +118,20 @@ internal static class ConsoleReporter
         }
         
         sb.AppendLine(new string('-', 40));
+
+        sb.AppendLine($"{C_MAGENTA}--- RECENT POOL EVENTS ---{ANSI_RESET}");
+        if (events != null && events.Any())
+        {
+            foreach (var ev in events.Reverse().Take(10).Reverse())
+            {
+                sb.AppendLine($"{C_GRAY}{ev}{ANSI_RESET}");
+            }
+        }
+        else
+        {
+            sb.AppendLine($"{C_GRAY}[None]{ANSI_RESET}");
+        }
+        
         sb.AppendLine();
     }
 

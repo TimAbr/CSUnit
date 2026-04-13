@@ -23,6 +23,7 @@ public class TestUnit
     public List<MethodInfo> BeforeEach { get; set; } = new();
     public List<MethodInfo> AfterEach { get; set; } = new();
     public int? TimeoutMs { get; set; }
+    public object[]? Arguments { get; set; }
 }
 
 public class ExecutableClassNode

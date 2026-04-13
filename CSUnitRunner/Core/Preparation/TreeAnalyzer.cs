@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using CSUnit.Attributes;
 using CSUnitRunner.Core.Models;
@@ -29,7 +26,6 @@ internal class TreeAnalyzer
     private ExecutableClassNode CreateExecutableClass(ClassNode rawClass)
     {
         var methods = rawClass.Methods;
-
         var exeClass = new ExecutableClassNode
         {
             Type = rawClass.Type,
@@ -40,18 +36,14 @@ internal class TreeAnalyzer
 
         var beforeEach = methods.Where(m => m.GetCustomAttribute<BeforeEachAttribute>() != null).ToList();
         var afterEach = methods.Where(m => m.GetCustomAttribute<AfterEachAttribute>() != null).ToList();
-        var testMethods = methods.Where(m => m.GetCustomAttribute<TestAttribute>() != null).ToList();
+        
+        var testMethods = methods.Where(m => 
+            m.GetCustomAttribute<TestAttribute>() != null || 
+            m.GetCustomAttribute<ParameterizedTestAttribute>() != null).ToList();
 
         foreach (var m in testMethods)
         {
-            exeClass.TestUnits.Add(new TestUnit
-            {
-                TestMethod = m,
-                DisplayName = m.GetCustomAttribute<DisplayNameAttribute>()?.Name ?? m.Name,
-                BeforeEach = beforeEach,
-                AfterEach = afterEach,
-                TimeoutMs = m.GetCustomAttribute<TimeoutAttribute>()?.Milliseconds
-            });
+            TestCaseExpander.Expand(m, rawClass, exeClass.TestUnits, beforeEach, afterEach);
         }
 
         return exeClass;

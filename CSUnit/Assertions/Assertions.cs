@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using CSUnit.Exceptions;
 
 namespace CSUnit.Assertions;
@@ -75,6 +76,17 @@ public static class Assertions
         if (!task.Wait(timeout))
         {
             throw new AssertionFailedException($"Execution exceeded timeout of {timeout.TotalMilliseconds}ms.");
+        }
+    }
+
+    public static void AssertThat(Expression<Func<bool>> expression)
+    {
+        var func = expression.Compile();
+        if (!func())
+        {
+            var details = ExpressionAnalyzer.Decompose(expression.Body);
+            var bodyStr = ExpressionAnalyzer.CleanExpressionString(expression.Body.ToString());
+            throw new AssertionFailedException($"Assertion failed: {bodyStr}\nDetailed analysis: {details}");
         }
     }
 }

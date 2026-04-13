@@ -10,12 +10,20 @@ public class CustomThreadPool : IDisposable
     private readonly int _maxSize;
     private readonly TimeSpan _keepAliveTime;
     private readonly Queue<Action> _workQueue = new();
+    private readonly Dictionary<Thread, DateTime> _activeTasks = new();
     private readonly List<Thread> _workers = new();
     private readonly object _lock = new();
+    private readonly TimeSpan _hangThreshold = TimeSpan.FromSeconds(30);
     
     private int _busyThreads;
     private int _idleThreads;
     private bool _isShuttingDown;
+
+    public event Action<Thread>? OnThreadCreated;
+    public event Action<Thread>? OnThreadRemoved;
+    public event Action<Thread, Action>? OnTaskStarted;
+    public event Action<Thread, Action>? OnTaskCompleted;
+    public event Action<Thread, TimeSpan>? OnThreadHung;
 
     public CustomThreadPool(int coreSize, int maxSize, TimeSpan keepAliveTime)
     {
@@ -38,9 +46,10 @@ public class CustomThreadPool : IDisposable
         {
             if (_isShuttingDown) return;
 
+            CheckForHungThreads();
+
             _workQueue.Enqueue(task);
 
-            // Scale if: we haven't reached max, and either no one is idle or the queue is growing.
             if (_workers.Count < _maxSize && _idleThreads == 0)
             {
                 CreateWorker(false);
@@ -50,15 +59,47 @@ public class CustomThreadPool : IDisposable
         }
     }
 
+    private void CheckForHungThreads()
+    {
+        lock (_lock)
+        {
+            var now = DateTime.Now;
+            List<Thread>? toReplace = null;
+
+            foreach (var kvp in _activeTasks)
+            {
+                if ((now - kvp.Value) > _hangThreshold)
+                {
+                    toReplace ??= new List<Thread>();
+                    toReplace.Add(kvp.Key);
+                }
+            }
+
+            if (toReplace != null)
+            {
+                foreach (var hungThread in toReplace)
+                {
+                    OnThreadHung?.Invoke(hungThread, now - _activeTasks[hungThread]);
+                    
+                    _workers.Remove(hungThread);
+                    _activeTasks.Remove(hungThread);
+        
+                    CreateWorker(isCore: _workers.Count < _coreSize);
+                }
+            }
+        }
+    }
+
     private void CreateWorker(bool isCore)
     {
         var thread = new Thread(WorkerLoop)
         {
             IsBackground = true,
-            Name = isCore ? $"Pool-Core-{_workers.Count}" : $"Pool-Extra-{_workers.Count}"
+            Name = isCore ? $"Pool-Core-{Guid.NewGuid().ToString()[..4]}" : $"Pool-Extra-{Guid.NewGuid().ToString()[..4]}"
         };
         _workers.Add(thread);
         thread.Start();
+        OnThreadCreated?.Invoke(thread);
     }
 
     private void WorkerLoop()
@@ -81,6 +122,7 @@ public class CustomThreadPool : IDisposable
                             if (!Monitor.Wait(_lock, _keepAliveTime))
                             {
                                 _workers.Remove(Thread.CurrentThread);
+                                OnThreadRemoved?.Invoke(Thread.CurrentThread);
                                 return;
                             }
                         }
@@ -98,11 +140,13 @@ public class CustomThreadPool : IDisposable
                 if (_isShuttingDown && _workQueue.Count == 0) return;
                 
                 task = _workQueue.Dequeue();
+                _activeTasks[Thread.CurrentThread] = DateTime.Now;
             }
 
             if (task != null)
             {
                 Interlocked.Increment(ref _busyThreads);
+                OnTaskStarted?.Invoke(Thread.CurrentThread, task);
                 try
                 {
                     task();
@@ -113,7 +157,12 @@ public class CustomThreadPool : IDisposable
                 }
                 finally
                 {
+                    OnTaskCompleted?.Invoke(Thread.CurrentThread, task);
                     Interlocked.Decrement(ref _busyThreads);
+                    lock (_lock)
+                    {
+                        _activeTasks.Remove(Thread.CurrentThread);
+                    }
                 }
             }
         }
@@ -123,6 +172,7 @@ public class CustomThreadPool : IDisposable
     {
         lock (_lock)
         {
+            CheckForHungThreads();
             return new ThreadPoolStatus
             {
                 TotalThreads = _workers.Count,

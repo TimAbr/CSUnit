@@ -57,7 +57,6 @@ internal class TestExecutor
 
             try
             {
-                // Run BeforeAll in the main thread (doesn't block the pool)
                 foreach (var m in currentClass.BeforeAll) m.Invoke(null, null);
 
                 if (currentClass.TestUnits.Count > 0)
@@ -97,7 +96,7 @@ internal class TestExecutor
                                         }
                                         finally
                                         {
-                                            testDone.Set();
+                                            try { testDone.Set(); } catch { }
                                         }
                                     });
 
@@ -141,7 +140,7 @@ internal class TestExecutor
                                         Console.WriteLine($"[Error] AfterAll failure: {ex.Message}");
                                     }
                                 }
-                                overallFinished.Signal();
+                                try { overallFinished.Signal(); } catch { }
                             }
                         });
                     }
@@ -179,7 +178,7 @@ internal class TestExecutor
             var instance = Activator.CreateInstance(classType)!;
 
             foreach (var m in unit.BeforeEach) InvokeMethod(m, instance);
-            InvokeMethod(unit.TestMethod, instance);
+            InvokeMethod(unit.TestMethod, instance, unit.Arguments);
             foreach (var m in unit.AfterEach) InvokeMethod(m, instance);
 
             result.Status = TestStatus.Passed;
@@ -213,9 +212,9 @@ internal class TestExecutor
         return result;
     }
 
-    private void InvokeMethod(MethodInfo method, object instance)
+    private void InvokeMethod(MethodInfo method, object instance, object[]? args = null)
     {
-        var result = method.Invoke(instance, null);
+        var result = method.Invoke(instance, args);
 
         if (result is Task task)
         {

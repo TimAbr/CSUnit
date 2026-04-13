@@ -7,10 +7,11 @@ using CSUnitRunner.Core.Models;
 
 namespace CSUnitRunner.Core.Preparation;
 
-internal class TreeFilter(string? targetClass = null, string? targetMethod = null)
+internal class TreeFilter(string? targetClass = null, string? targetMethod = null, Func<MemberInfo, bool>? filterDelegate = null)
 {
     private readonly string? _targetClass = targetClass;
     private readonly string? _targetMethod = targetMethod;
+    private readonly Func<MemberInfo, bool>? _filterDelegate = filterDelegate;
 
     public NamespaceNode? Filter(NamespaceNode? node)
     {
@@ -18,6 +19,7 @@ internal class TreeFilter(string? targetClass = null, string? targetMethod = nul
 
         RemoveDisabled(node);
         ApplyCliFilters(node);
+        ApplyDelegateFilter(node);
 
         return CleanupEmptyNodes(node);
     }
@@ -65,6 +67,32 @@ internal class TreeFilter(string? targetClass = null, string? targetMethod = nul
         }
     }
 
+    private void ApplyDelegateFilter(NamespaceNode node)
+    {
+        if (_filterDelegate == null) return;
+
+        foreach (var @class in node.Classes)
+        {
+            bool classMatches = _filterDelegate(@class.Type);
+            
+            if (!classMatches)
+            {
+                @class.Methods = @class.Methods
+                    .Where(m => _filterDelegate(m))
+                    .ToList();
+            }
+        }
+
+        node.Classes = node.Classes
+            .Where(c => _filterDelegate(c.Type) || c.Methods.Any())
+            .ToList();
+
+        foreach (var subNs in node.SubNamespaces)
+        {
+            ApplyDelegateFilter(subNs);
+        }
+    }
+
     private NamespaceNode? CleanupEmptyNodes(NamespaceNode node)
     {
         var filteredSubNamespaces = new List<NamespaceNode>();
@@ -76,7 +104,9 @@ internal class TreeFilter(string? targetClass = null, string? targetMethod = nul
         node.SubNamespaces = filteredSubNamespaces;
 
         node.Classes = node.Classes
-            .Where(c => c.Methods.Any(m => m.GetCustomAttribute<TestAttribute>() != null))
+            .Where(c => c.Methods.Any(m => 
+                m.GetCustomAttribute<TestAttribute>() != null || 
+                m.GetCustomAttribute<ParameterizedTestAttribute>() != null))
             .ToList();
 
         if (!node.Classes.Any() && !node.SubNamespaces.Any())

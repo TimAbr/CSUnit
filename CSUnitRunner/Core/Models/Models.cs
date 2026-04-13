@@ -24,6 +24,7 @@ public class TestUnit
     public List<MethodInfo> AfterEach { get; set; } = new();
     public int? TimeoutMs { get; set; }
     public object[]? Arguments { get; set; }
+    public int Priority { get; set; } = 2;
 }
 
 public class ExecutableClassNode

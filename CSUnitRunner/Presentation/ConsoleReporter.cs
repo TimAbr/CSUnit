@@ -80,7 +80,7 @@ internal static class ConsoleReporter
             List<TestResult> results;
             lock (report.SyncLock)
             {
-                results = report.Results.OrderBy(res => res.Name).ToList();
+                results = report.Results.ToList();
             }
 
             foreach (var res in results)

@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CSUnit.Exceptions;
 using CSUnitRunner.Core.Models;
+using CSUnitRunner.Core.Logging;
 
 namespace CSUnitRunner.Core.Execution;
 
@@ -63,7 +64,7 @@ internal class TestExecutor
                 {
                     int unitsRemainingInClass = currentClass.TestUnits.Count;
 
-                    foreach (var unit in currentClass.TestUnits)
+                    foreach (var unit in currentClass.TestUnits.OrderBy(u => u.Priority))
                     {
                         var currentUnit = unit;
                         var result = new TestResult { Name = currentUnit.DisplayName, Status = TestStatus.Pending, StartTime = null };

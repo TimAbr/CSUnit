@@ -62,7 +62,8 @@ internal static class TestCaseExpander
             Arguments = args,
             BeforeEach = beforeEach,
             AfterEach = afterEach,
-            TimeoutMs = method.GetCustomAttribute<TimeoutAttribute>()?.Milliseconds
+            TimeoutMs = method.GetCustomAttribute<TimeoutAttribute>()?.Milliseconds,
+            Priority = method.GetCustomAttribute<PriorityAttribute>()?.Priority ?? 2
         };
     }
 }
